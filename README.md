@@ -1,6 +1,6 @@
-# ai_midi_hw
+# synth_module_daemon
 
-Standalone hardware daemon for the [ai_midi](../ai_midi) sequencer. Runs on a
+Standalone hardware daemon for the [ai_midi](https://github.com/jbellinghausen/ai_midi) sequencer. Runs on a
 Raspberry Pi and drives CV/gate (GPIO + MCP4728 DACs), clock/run outputs and
 USB MIDI in response to commands sent over TCP by a remote sequencer.
 
