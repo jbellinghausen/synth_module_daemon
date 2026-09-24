@@ -1,0 +1,5 @@
+# rpi-lgpio provides the RPi.GPIO API on top of lgpio (works on Pi 5 and older)
+rpi-lgpio>=0.6
+smbus2>=0.4
+mido>=1.3
+python-rtmidi>=1.5

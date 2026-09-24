@@ -1,0 +1,19 @@
+[Unit]
+Description=AI MIDI remote hardware daemon
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+Group=@USER@
+SupplementaryGroups=gpio i2c audio
+WorkingDirectory=@DIR@
+ExecStart=@DIR@/venv/bin/python -u @DIR@/hw_daemon.py @ARGS@
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
