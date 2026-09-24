@@ -12,6 +12,7 @@ synth_module_daemon/
   clients/python/      Python client (pip package: synth-module-client)
   clients/js/          JS/browser client (npm package: synth-module-client)
   tests/               Python + JS tests, run against a dry-run daemon
+  example_prompts/     prompts for building apps on the module with an AI coding assistant
 ```
 
 ## Using the clients
