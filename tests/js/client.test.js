@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import WebSocketImpl from 'ws';
+import WebSocketImpl, { WebSocketServer } from 'ws';
 
 import {
   CMD, RESP, SynthModuleClient, SynthModuleError, packMsg, unpackMsg,
@@ -117,4 +117,37 @@ test('connect to closed port rejects', async () => {
 
 test('RESP constants match protocol', () => {
   assert.deepEqual(RESP, { PONG: 0xfe, ERROR: 0xf0, ACK: 0xf1 });
+});
+
+test('onclose fires when an established connection drops', async () => {
+  // Fake daemon: answers the connect ping, then drops the connection
+  const server = new WebSocketServer({ port: 0 });
+  await once(server, 'listening');
+  server.on('connection', (sock) => {
+    sock.on('message', () => {
+      sock.send(packMsg(RESP.PONG));
+      setTimeout(() => sock.terminate(), 50);
+    });
+  });
+  try {
+    const synth = new SynthModuleClient('127.0.0.1', { port: server.address().port, WebSocket });
+    const dropped = new Promise((resolve) => { synth.onclose = resolve; });
+    await synth.connect();
+    await dropped;
+    assert.equal(synth.isConnected, false);
+  } finally {
+    server.close();
+  }
+});
+
+test('onclose does not fire for close() or a rejected connect()', async () => {
+  let calls = 0;
+  await connected(async (synth) => {
+    const other = new SynthModuleClient('127.0.0.1', { port: wsPort, WebSocket });
+    other.onclose = () => { calls += 1; };
+    await assert.rejects(other.connect(), /busy/);
+    synth.onclose = () => { calls += 1; };
+  });
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(calls, 0);
 });

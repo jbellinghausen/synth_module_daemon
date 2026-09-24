@@ -54,6 +54,10 @@ await synth.clockStart(120);
 No bundler? It's a single dependency-free ES module, so you can also copy
 `clients/js/synth-module-client.js` into your project and import it directly.
 
+**See the [web apps guide](clients/js/README.md)** for serving requirements,
+reconnecting, CV/MIDI details, timing tips, three.js and React examples, and
+troubleshooting.
+
 Browsers connect over plain `ws://` on port 9743, so the page must be served
 over `http://` (or from localhost): browsers block `ws://` from `https://`
 pages. Browsers can't do UDP discovery, so pass the Pi's hostname or IP.

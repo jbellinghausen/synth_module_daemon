@@ -69,6 +69,7 @@ export declare class SynthModuleClient {
   readonly url: string;
   timeout: number;
   readonly isConnected: boolean;
+  /** Fires when an established connection drops unexpectedly (not on close() or a failed connect()). */
   onclose: ((event: CloseEvent) => void) | null;
 
   connect(): Promise<this>;

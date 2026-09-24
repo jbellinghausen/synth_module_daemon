@@ -104,7 +104,10 @@ export class SynthModuleClient {
     this._WebSocket = WS || globalThis.WebSocket;
     this._ws = null;
     this._pending = [];
-    /** Called with the CloseEvent when the connection drops. */
+    /**
+     * Called with the CloseEvent when an established connection drops
+     * unexpectedly. Not called for close() or for a failed connect().
+     */
     this.onclose = null;
   }
 
@@ -131,13 +134,16 @@ export class SynthModuleClient {
 
     let resolveClosed;
     const closed = new Promise((resolve) => { resolveClosed = resolve; });
+    let established = false;
     ws.onmessage = (event) => this._onMessage(event.data);
     ws.onerror = null;
     ws.onclose = (event) => {
+      // close() clears this._ws first, so a user-initiated close isn't "current"
+      const unexpected = this._ws === ws && established;
       if (this._ws === ws) this._ws = null;
       this._rejectAll(new SynthModuleError(closeReason(event.code)));
       resolveClosed(event.code);
-      if (this.onclose) this.onclose(event);
+      if (unexpected && this.onclose) this.onclose(event);
     };
 
     // The daemon accepts the handshake, then closes with 1013 if it is busy
@@ -149,6 +155,7 @@ export class SynthModuleClient {
       if (code === CLOSE_BUSY) throw new SynthModuleError(closeReason(code));
       throw err;
     }
+    established = true;
     return this;
   }
 
