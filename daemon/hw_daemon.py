@@ -3,16 +3,19 @@
 AI MIDI Remote Hardware Daemon
 
 Lightweight daemon that runs on Raspberry Pi and drives GPIO/DAC/MIDI
-hardware in response to commands received over TCP from a remote sequencer.
+hardware in response to commands received over TCP (or WebSocket, for
+browsers) from a remote sequencer. See PROTOCOL.md.
 
 Usage:
     python hw_daemon.py                    # Run with default settings
     python hw_daemon.py --dry-run          # Log commands without hardware
-    python hw_daemon.py --port 9741        # Custom port
+    python hw_daemon.py --port 9741        # Custom TCP port
+    python hw_daemon.py --ws-port 9743     # Custom WebSocket port
+    python hw_daemon.py --no-websocket     # TCP only
     python hw_daemon.py --config hw.json   # Custom hardware config
 
 Install as a boot service on the Pi:
-    ./install.sh
+    daemon/install.sh
 """
 
 import argparse
@@ -25,8 +28,15 @@ import struct
 import sys
 import threading
 import time
+from pathlib import Path
 
-from remote_protocol import (
+try:
+    import synth_module_client.protocol  # noqa: F401
+except ImportError:
+    # Running from a checkout without the client package installed
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "clients" / "python"))
+
+from synth_module_client.protocol import (
     MSG_FORMAT, MSG_SIZE,
     CMD_CV_NOTE_ON, CMD_CV_GATE_OFF,
     CMD_MIDI_NOTE_ON, CMD_MIDI_NOTE_OFF, CMD_MIDI_CC,
@@ -35,7 +45,7 @@ from remote_protocol import (
     CMD_QUERY_DEVICES,
     CMD_PING, CMD_SHUTDOWN,
     RESP_PONG, RESP_ACK, RESP_ERROR,
-    DEFAULT_PORT, DISCOVERY_PORT,
+    DEFAULT_PORT, DISCOVERY_PORT, WEBSOCKET_PORT,
     DISCOVERY_MAGIC, DISCOVERY_RESPONSE_MAGIC,
     pack_msg, unpack_msg,
 )
@@ -145,11 +155,15 @@ class MCP4728:
 
 
 class HardwareDaemon:
-    """Lightweight TCP server that drives Pi hardware from remote commands."""
+    """Lightweight TCP/WebSocket server that drives Pi hardware from remote commands.
 
-    def __init__(self, config, port=DEFAULT_PORT, dry_run=False):
+    Only one client (over either transport) is served at a time.
+    """
+
+    def __init__(self, config, port=DEFAULT_PORT, dry_run=False, ws_port=WEBSOCKET_PORT):
         self.config = config
         self.port = port
+        self.ws_port = ws_port      # None disables the WebSocket listener
         self.dry_run = dry_run
         self.running = True
         self.start_time = time.monotonic()
@@ -180,6 +194,10 @@ class HardwareDaemon:
         # Network
         self.server_sock = None
         self.client_sock = None
+        self.ws_server = None
+        self.discovery_port = None
+        self.active_client = None   # description of the connected client, if any
+        self._client_lock = threading.Lock()
 
         self._init_hardware()
 
@@ -494,9 +512,10 @@ class HardwareDaemon:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("0.0.0.0", DISCOVERY_PORT))
         sock.settimeout(1.0)
+        self.discovery_port = sock.getsockname()[1]
 
         hostname = socket.gethostname()
-        logger.info(f"Discovery listener on UDP port {DISCOVERY_PORT}")
+        logger.info(f"Discovery listener on UDP port {self.discovery_port}")
 
         while self.running:
             try:
@@ -508,12 +527,12 @@ class HardwareDaemon:
 
             if data == DISCOVERY_MAGIC:
                 uptime = int(time.monotonic() - self.start_time)
-                has_client = self.client_sock is not None
                 payload = json.dumps({
                     "port": self.port,
+                    "ws_port": self.ws_port if self.ws_server else None,
                     "hostname": hostname,
                     "uptime": uptime,
-                    "busy": has_client,
+                    "busy": self.active_client is not None,
                 }).encode()
                 response = DISCOVERY_RESPONSE_MAGIC + payload
                 try:
@@ -524,6 +543,92 @@ class HardwareDaemon:
 
         sock.close()
 
+    # --- Client ownership (one client across all transports) ---
+
+    def _claim_client(self, description):
+        """Mark a client as connected. Returns False if another client is active."""
+        with self._client_lock:
+            if self.active_client is not None:
+                logger.warning(f"Rejecting {description}: {self.active_client} is connected")
+                return False
+            self.active_client = description
+        logger.info(f"Client connected: {description}")
+        return True
+
+    def _release_client(self):
+        """Silence outputs and free the client slot after a disconnect."""
+        logger.info(f"Client disconnected: {self.active_client}")
+        self._all_notes_off()
+        self._stop_clock()
+        self._set_run_state(False)
+        with self._client_lock:
+            self.active_client = None
+
+    def _process_messages(self, buf, send):
+        """Handle all complete messages in buf, sending responses via send().
+
+        Returns the unconsumed remainder of buf.
+        """
+        while len(buf) >= MSG_SIZE:
+            msg = buf[:MSG_SIZE]
+            buf = buf[MSG_SIZE:]
+
+            cmd, slot, val1, val2, flags = unpack_msg(msg)
+            response = self._handle_command(cmd, slot, val1, val2, flags)
+            if response:
+                send(response)
+        return buf
+
+    # --- WebSocket listener (browsers) ---
+
+    def _run_websocket_server(self):
+        """Background thread: accept WebSocket clients speaking the same binary protocol."""
+        try:
+            from websockets.sync.server import serve
+        except ImportError:
+            logger.warning("websockets not installed - WebSocket listener disabled")
+            return
+
+        # compression=None keeps per-message latency down
+        with serve(self._handle_ws_client, "0.0.0.0", self.ws_port,
+                   compression=None) as server:
+            self.ws_port = server.socket.getsockname()[1]
+            self.ws_server = server
+            logger.info(f"WebSocket listening on 0.0.0.0:{self.ws_port}")
+            server.serve_forever()
+
+    def _handle_ws_client(self, ws):
+        """Serve one WebSocket connection. Each binary frame holds one or more messages."""
+        from websockets.exceptions import ConnectionClosed
+
+        description = f"websocket {ws.remote_address}"
+        if not self._claim_client(description):
+            ws.close(1013, "busy: another client is connected")
+            return
+        try:
+            ws.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
+
+        try:
+            buf = b""
+            while self.running:
+                try:
+                    data = ws.recv(timeout=0.5)
+                except TimeoutError:
+                    continue
+                except ConnectionClosed:
+                    break
+                if isinstance(data, str):
+                    logger.warning("Ignoring text frame: protocol messages must be binary")
+                    continue
+                try:
+                    buf = self._process_messages(buf + data, ws.send)
+                except ConnectionClosed:
+                    break
+        finally:
+            self._release_client()
+
     # --- Main server loop ---
 
     def run(self):
@@ -533,11 +638,17 @@ class HardwareDaemon:
             target=self._run_discovery_listener, daemon=True)
         self._discovery_thread.start()
 
+        if self.ws_port is not None:
+            self._ws_thread = threading.Thread(
+                target=self._run_websocket_server, daemon=True)
+            self._ws_thread.start()
+
         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_sock.bind(("0.0.0.0", self.port))
         self.server_sock.listen(1)
         self.server_sock.setblocking(False)
+        self.port = self.server_sock.getsockname()[1]
 
         logger.info(f"Listening on 0.0.0.0:{self.port}")
 
@@ -551,32 +662,19 @@ class HardwareDaemon:
             if not readable:
                 continue
 
-            try:
-                client, addr = self.server_sock.accept()
-            except OSError:
+            accepted = self._accept_tcp()
+            if accepted is None:
                 continue
-
-            # Reject if already have a client
-            if self.client_sock is not None:
-                logger.warning(f"Rejecting second client {addr}")
-                try:
-                    client.close()
-                except OSError:
-                    pass
-                continue
+            client, addr = accepted
 
             client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             client.setblocking(False)
             self.client_sock = client
-            logger.info(f"Client connected: {addr}")
 
             self._handle_client()
 
             # Client disconnected
-            logger.info(f"Client disconnected: {addr}")
-            self._all_notes_off()
-            self._stop_clock()
-            self._set_run_state(False)
+            self._release_client()
             try:
                 self.client_sock.close()
             except OSError:
@@ -585,17 +683,40 @@ class HardwareDaemon:
 
         self._cleanup()
 
+    def _accept_tcp(self):
+        """Accept a pending TCP connection.
+
+        Returns (sock, addr) if it became the active client, or None if it was
+        rejected because another client is connected.
+        """
+        try:
+            client, addr = self.server_sock.accept()
+        except OSError:
+            return None
+        if not self._claim_client(f"tcp {addr}"):
+            try:
+                client.close()
+            except OSError:
+                pass
+            return None
+        return client, addr
+
     def _handle_client(self):
         """Process commands from the connected client until disconnect."""
         buf = b""
 
         while self.running:
             try:
-                readable, _, _ = select.select([self.client_sock], [], [], 0.5)
+                # Also watch the listener so extra clients are turned away
+                # immediately instead of waiting in the backlog
+                readable, _, _ = select.select(
+                    [self.client_sock, self.server_sock], [], [], 0.5)
             except (select.error, ValueError, OSError):
                 break
 
-            if not readable:
+            if self.server_sock in readable:
+                self._accept_tcp()  # always rejected: we already have a client
+            if self.client_sock not in readable:
                 continue
 
             try:
@@ -608,25 +729,22 @@ class HardwareDaemon:
             if not data:
                 break  # Client disconnected
 
-            buf += data
-
-            # Process all complete messages in buffer
-            while len(buf) >= MSG_SIZE:
-                msg = buf[:MSG_SIZE]
-                buf = buf[MSG_SIZE:]
-
-                cmd, slot, val1, val2, flags = unpack_msg(msg)
-                response = self._handle_command(cmd, slot, val1, val2, flags)
-
-                if response:
-                    try:
-                        self.client_sock.sendall(response)
-                    except (BrokenPipeError, OSError):
-                        return
+            try:
+                buf = self._process_messages(buf + data, self.client_sock.sendall)
+            except OSError:
+                return
 
     def _cleanup(self):
         """Clean shutdown."""
         logger.info("Cleaning up...")
+
+        # Stop WebSocket listener and let an active WS client finish releasing
+        if self.ws_server:
+            self.ws_server.shutdown()
+            deadline = time.monotonic() + 2.0
+            while self.active_client is not None and time.monotonic() < deadline:
+                time.sleep(0.05)
+
         self._all_notes_off()
         self._stop_clock()
 
@@ -667,6 +785,10 @@ def main():
     parser = argparse.ArgumentParser(description="AI MIDI Remote Hardware Daemon")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
                         help=f"TCP port (default: {DEFAULT_PORT})")
+    parser.add_argument("--ws-port", type=int, default=WEBSOCKET_PORT,
+                        help=f"WebSocket port for browser clients (default: {WEBSOCKET_PORT})")
+    parser.add_argument("--no-websocket", action="store_true",
+                        help="Disable the WebSocket listener")
     parser.add_argument("--config", type=str, default=None,
                         help="Path to JSON hardware config file")
     parser.add_argument("--dry-run", action="store_true",
@@ -690,7 +812,8 @@ def main():
     # Initialize hardware imports
     _init_hw_imports(args.dry_run)
 
-    daemon = HardwareDaemon(config, port=args.port, dry_run=args.dry_run)
+    ws_port = None if args.no_websocket else args.ws_port
+    daemon = HardwareDaemon(config, port=args.port, dry_run=args.dry_run, ws_port=ws_port)
 
     # Signal handlers for clean shutdown
     def shutdown(sig, frame):

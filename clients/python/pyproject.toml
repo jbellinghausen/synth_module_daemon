@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synth-module-client"
+version = "0.1.0"
+description = "Client for the synth module daemon (CV/gate, clock and MIDI on a Raspberry Pi)"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[tool.setuptools]
+packages = ["synth_module_client"]

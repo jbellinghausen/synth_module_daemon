@@ -1,9 +1,10 @@
 """
-Remote hardware protocol constants and helpers.
+Synth module wire protocol constants and helpers.
 
-Shared between RemoteBackend (PC side) and hw_daemon (Pi side).
-Keep in sync with remote_protocol.py in the ai_midi repo.
-All messages are fixed 8-byte binary packets: >BBHHH
+Shared by the daemon (Pi side) and the Python client. See PROTOCOL.md for the
+language-neutral spec; the JS client mirrors these values.
+
+All commands are fixed 8-byte binary packets: >BBHHH
 """
 
 import struct
@@ -17,9 +18,9 @@ MSG_SIZE = 8
 # Hot path (fire-and-forget, no ACK)
 CMD_CV_NOTE_ON    = 0x01  # slot=slot, val1=note, val2=velocity
 CMD_CV_GATE_OFF   = 0x02  # slot=slot, val1=note
-CMD_MIDI_NOTE_ON  = 0x03  # slot=channel, val1=note, val2=velocity
-CMD_MIDI_NOTE_OFF = 0x04  # slot=channel, val1=note
-CMD_MIDI_CC       = 0x05  # slot=channel, val1=cc_number, val2=cc_value
+CMD_MIDI_NOTE_ON  = 0x03  # slot=channel, val1=note, val2=velocity, flags=device
+CMD_MIDI_NOTE_OFF = 0x04  # slot=channel, val1=note, flags=device
+CMD_MIDI_CC       = 0x05  # slot=channel, val1=cc_number, val2=cc_value, flags=device
 
 # Clock/transport (ACK'd)
 CMD_CLOCK_START   = 0x10  # val1=bpm
@@ -37,14 +38,15 @@ CMD_QUERY_DEVICES = 0x40
 CMD_PING          = 0xFE
 CMD_SHUTDOWN      = 0xFF
 
-# --- Response types (Pi -> PC) ---
+# --- Response types (daemon -> client) ---
 RESP_PONG         = 0xFE  # val1=uptime seconds
 RESP_ERROR        = 0xF0  # val1=error code, val2=failed cmd
 RESP_ACK          = 0xF1  # val1=ack'd cmd
 
 # Default ports
-DEFAULT_PORT = 9741
-DISCOVERY_PORT = 9742
+DEFAULT_PORT = 9741      # TCP command stream
+DISCOVERY_PORT = 9742    # UDP discovery
+WEBSOCKET_PORT = 9743    # WebSocket command stream (browsers)
 
 # UDP discovery protocol
 DISCOVERY_MAGIC = b"AI_MIDI_DISCOVER"

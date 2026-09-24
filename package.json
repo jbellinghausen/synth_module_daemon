@@ -1,0 +1,28 @@
+{
+  "name": "synth-module-client",
+  "version": "0.1.0",
+  "description": "WebSocket client for the synth module daemon (CV/gate, clock and MIDI on a Raspberry Pi)",
+  "type": "module",
+  "main": "./clients/js/synth-module-client.js",
+  "types": "./clients/js/synth-module-client.d.ts",
+  "exports": {
+    ".": {
+      "types": "./clients/js/synth-module-client.d.ts",
+      "default": "./clients/js/synth-module-client.js"
+    }
+  },
+  "files": [
+    "clients/js/synth-module-client.js",
+    "clients/js/synth-module-client.d.ts"
+  ],
+  "scripts": {
+    "test": "node --test tests/js/"
+  },
+  "devDependencies": {
+    "ws": "^8.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jbellinghausen/synth_module_daemon.git"
+  }
+}
