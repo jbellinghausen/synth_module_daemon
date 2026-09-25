@@ -110,6 +110,9 @@ used (12 CV/gate slots across three MCP4728 DACs at 0x60–0x62, clock on GPIO
 
 ### Behavior notes
 
+- CV pitch is 1 V/octave with note 24 = 0 V. The 3.3 V DACs limit the usable
+  range to **notes 24-63**; out-of-range notes are clamped silently (no
+  error), so they sound stuck on the lowest or highest note.
 - One client at a time, across TCP and WebSocket together. Others are refused.
 - On disconnect the daemon sends all-notes-off, stops the clock and drops the
   run signal.

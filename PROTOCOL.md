@@ -64,8 +64,10 @@ Every command is 8 bytes, big-endian:
 Notes:
 
 - **CV pitch**: 1 V/octave with MIDI note 24 at 0 V, clamped to the DAC
-  reference (3.3 V, so notes 24–63). The gate goes high on `CV_NOTE_ON` and
-  low on `CV_GATE_OFF`; pitch holds its last value.
+  reference (3.3 V, so notes 24–63). Out-of-range notes are clamped
+  silently; no `ERROR` is returned. This assumes the DACs drive the jacks
+  directly, with no gain stage. The gate goes high on `CV_NOTE_ON` and low
+  on `CV_GATE_OFF`; pitch holds its last value.
 - **MIDI device**: `flags` selects an output by index from `QUERY_DEVICES`.
   0 (or an unknown index) means the default output.
 - **Clock**: `CLOCK_START`/`CLOCK_SET_BPM` drive the hardware clock output;

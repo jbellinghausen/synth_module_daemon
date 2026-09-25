@@ -174,7 +174,12 @@ export class SynthModuleClient {
 
   // --- CV / gate ---
 
-  /** Set a slot's pitch CV for a MIDI note number and raise its gate. */
+  /**
+   * Set a slot's pitch CV for a MIDI note number and raise its gate.
+   * Pitch is 1 V/octave with note 24 (C1) at 0 V; the DAC tops out at 3.3 V,
+   * so only notes 24-63 are distinct. Out-of-range notes are clamped silently
+   * by the daemon (no error).
+   */
   cvNoteOn(slot, note, velocity = 127) {
     this._send(CMD.CV_NOTE_ON, slot, note, velocity);
   }

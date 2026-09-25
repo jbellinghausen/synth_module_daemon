@@ -39,7 +39,7 @@ with SynthModuleClient(host) as synth:
 | Method | Notes |
 |--------|-------|
 | `connect()` / `close()` / context manager | `connect()` verifies with a ping |
-| `cv_note_on(slot, note, velocity=127)` | Pitch CV + gate high |
+| `cv_note_on(slot, note, velocity=127)` | Pitch CV + gate high. Notes 24-63 (see below) |
 | `cv_gate_off(slot, note=0)` | Gate low, pitch holds |
 | `midi_note_on(channel, note, velocity=100, device=0)` | |
 | `midi_note_off(channel, note, device=0)` | |
@@ -50,6 +50,23 @@ with SynthModuleClient(host) as synth:
 | `ping()` → `Pong(rtt_ms, uptime_s)` | |
 | `query_devices()` → dict | MIDI outputs and CV slot count |
 | `discover(timeout=2.0)` → `[DaemonInfo]` | UDP broadcast on the LAN |
+
+## CV pitch range
+
+The module has 12 CV/gate slots, numbered 0-11. Pitch CV is 1 V/octave with
+**note 24 (C1) = 0 V**. The DAC tops out at 3.3 V, so the usable range is
+**notes 24-63**.
+
+Notes outside that range are **clamped silently** by the daemon: lower notes
+play as 0 V and higher ones as 3.3 V, with no error from the client. A
+melody that strays out of range just sounds stuck on its lowest or highest
+note. Keep your note generation within 24-63, or transpose into it.
+
+The range assumes the DAC outputs drive the jacks directly. If your hardware
+has a gain stage after the DACs, measure a jack (note 24 should read 0 V,
+note 36 should read 1 V) and adjust.
+
+`velocity` is accepted but not currently output as a voltage.
 
 Errors:
 

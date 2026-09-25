@@ -75,7 +75,12 @@ export declare class SynthModuleClient {
   connect(): Promise<this>;
   close(): void;
 
+  /**
+   * Set pitch CV and raise the gate. 1 V/oct, note 24 = 0 V; usable range
+   * 24-63 (3.3 V DAC). Out-of-range notes are clamped silently, no error.
+   */
   cvNoteOn(slot: number, note: number, velocity?: number): void;
+  /** Lower the gate. Pitch CV holds its last value. */
   cvGateOff(slot: number, note?: number): void;
 
   midiNoteOn(channel: number, note: number, velocity?: number, device?: number): void;

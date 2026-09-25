@@ -134,7 +134,12 @@ class SynthModuleClient:
     # --- CV / gate ---
 
     def cv_note_on(self, slot: int, note: int, velocity: int = 127) -> None:
-        """Set a slot's pitch CV for a MIDI note number and raise its gate."""
+        """Set a slot's pitch CV for a MIDI note number and raise its gate.
+
+        Pitch is 1 V/octave with note 24 (C1) at 0 V. The DAC tops out at
+        3.3 V, so only notes 24-63 are distinct; the daemon silently clamps
+        lower notes to 0 V and higher ones to 3.3 V (no error is raised).
+        """
         self._send(CMD_CV_NOTE_ON, slot, note, velocity)
 
     def cv_gate_off(self, slot: int, note: int = 0) -> None:

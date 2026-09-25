@@ -190,8 +190,15 @@ synth.cvGateOff(slot);                        // gate low (pitch holds)
 ```
 
 - `note` is a MIDI note number. Note **24 (C1) = 0 V**, and each octave adds
-  1 V. The DAC tops out at 3.3 V, so the usable range is notes **24-63**;
-  lower notes clamp to 0 V and higher ones to 3.3 V.
+  1 V. The DAC tops out at 3.3 V, so the usable range is notes **24-63**
+  (a bit over three octaves).
+- Out-of-range notes are **clamped silently**: lower notes play as 0 V and
+  higher ones as 3.3 V, and the client raises no error. A melody that strays
+  out of range sounds stuck on its lowest or highest note, so keep generated
+  notes within 24-63 (or transpose into it).
+- These voltages assume the DAC outputs drive the jacks directly. If your
+  hardware has a gain stage after the DACs, measure a jack (note 24 should
+  read 0 V, note 36 should read 1 V) and adjust.
 - `velocity` is accepted but not currently output as a voltage.
 - Calling `cvNoteOn` on a slot whose gate is already high changes the pitch
   without re-triggering the gate (legato). To re-trigger, send `cvGateOff`
