@@ -1,0 +1,11 @@
+[Unit]
+Description=Restart hw-daemon after a MIDI device is added or removed
+# Triggered by 90-hw-daemon-midi.rules. Events arriving while this runs are
+# merged into one restart.
+
+[Service]
+Type=oneshot
+# Give ALSA a moment to register the device's sequencer port first
+ExecStartPre=/bin/sleep 2
+# try-restart does nothing if the daemon isn't running (e.g. during boot)
+ExecStart=/usr/bin/systemctl try-restart hw-daemon.service

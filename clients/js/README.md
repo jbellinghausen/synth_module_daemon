@@ -127,7 +127,8 @@ can also be a full URL like `'ws://192.168.1.234:9743'`.
 ### Staying connected
 
 The client doesn't reconnect on its own. `onclose` fires when an established
-connection drops unexpectedly (Pi rebooted, Wi-Fi blip); it does not fire for
+connection drops unexpectedly (Pi rebooted, Wi-Fi blip, or the daemon
+restarting because a MIDI device was plugged in or removed); it does not fire for
 your own `close()` or for a failed `connect()`. This helper keeps retrying:
 
 ```js
@@ -416,7 +417,7 @@ before the retry connects.
 | Works on localhost, fails when deployed | The page is on `https://`. Serve it over `http://`; see [Serving your app](#serving-your-app). |
 | `raspberrypi.local` doesn't resolve | mDNS isn't supported on that device (common on Android). Use the IP address. |
 | Connected but no sound from CV | Check the slot number (0-11) and the note range (24-63). Pitch is 1 V/oct from note 24. |
-| Connected but no MIDI | Channels are 0-based. Check `queryDevices()` lists your interface. If you plugged it in after boot, restart the daemon. |
+| Connected but no MIDI | Channels are 0-based. Check `queryDevices()` lists your interface. Plugging a MIDI device in restarts the daemon (your app reconnects if it uses `keepConnected`); if the interface still isn't listed, run `sudo systemctl restart hw-daemon` on the Pi. |
 | Notes stutter or hang when the tab is hidden | Background tab throttling; see [Timing tips](#timing-tips). |
 | Stuck notes | `synth.allNotesOff()`, or just reload the page: disconnecting silences everything. |
 

@@ -1,0 +1,12 @@
+# Options for the hw-daemon service, installed as /etc/default/hw-daemon.
+# Apply changes with: sudo systemctl restart hw-daemon
+#
+# HW_DAEMON_ARGS is passed to daemon/hw_daemon.py. Relative paths are
+# resolved from the repo root. See all options with:
+#   venv/bin/python daemon/hw_daemon.py --help
+#
+# Examples:
+#   HW_DAEMON_ARGS="--log-level DEBUG"
+#   HW_DAEMON_ARGS="--config hw_config.json"
+#   HW_DAEMON_ARGS="--no-websocket"
+HW_DAEMON_ARGS=""

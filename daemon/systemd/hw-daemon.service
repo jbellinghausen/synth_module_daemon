@@ -1,7 +1,9 @@
 [Unit]
-Description=AI MIDI remote hardware daemon
-After=network-online.target sound.target
-Wants=network-online.target
+Description=Synth module hardware daemon (CV/gate, clock, MIDI)
+Documentation=https://github.com/jbellinghausen/synth_module_daemon
+# Wait for ALSA so USB MIDI outputs are visible. The daemon binds 0.0.0.0,
+# so it doesn't need to wait for the network to be online.
+After=sound.target network.target
 
 [Service]
 Type=simple
@@ -9,7 +11,9 @@ User=@USER@
 Group=@USER@
 SupplementaryGroups=gpio i2c audio
 WorkingDirectory=@DIR@
-ExecStart=@DIR@/venv/bin/python -u @DIR@/daemon/hw_daemon.py @ARGS@
+# Daemon options live here; edit and `sudo systemctl restart hw-daemon`
+EnvironmentFile=-/etc/default/hw-daemon
+ExecStart=@DIR@/venv/bin/python -u @DIR@/daemon/hw_daemon.py $HW_DAEMON_ARGS
 Restart=on-failure
 RestartSec=3
 KillSignal=SIGTERM

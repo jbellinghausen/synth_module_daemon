@@ -1,0 +1,4 @@
+# The daemon only enumerates MIDI outputs at startup. When a MIDI device is
+# plugged in or removed, ask systemd to restart it (via a short debounce
+# unit) so the device list stays current. Installed to /etc/udev/rules.d/.
+ACTION=="add|remove", SUBSYSTEM=="sound", KERNEL=="midiC*D*", RUN+="/usr/bin/systemctl --no-block start hw-daemon-midi-rescan.service"
